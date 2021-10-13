@@ -8,10 +8,11 @@ words = ["аэропорт", "аквариум", "филармония", "наш
          "эксплуатация", "машина", "коляска", "фракция", "ириска", "напалм", "экскурсия", "фунчоза", "картошка",
          "зоопарк", "задира", "карамель"]
 rand_word = ""  # рандомное слово
-letters = []  # список с буквами рандомного слова
-letters_game = []  # список с решетками
+list_letters = []  # список с буквами рандомного слова
+list_lattice = []  # список с решетками
 letter = ""  # случайно сгенерированная буква
-attempts = 3  # попытки
+attempts = 0  # попытки
+rand_letter = ""  # рандомная буква
 bot = telebot.TeleBot(TOKEN)
 
 
@@ -21,60 +22,98 @@ def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     item1 = types.KeyboardButton("Начать игру")
     item2 = types.KeyboardButton("Правила игры")
-    item3 = types.KeyboardButton("Начать заново")
+    item3 = types.KeyboardButton("Доступные слова")
     markup.add(item1, item2, item3)
 
     bot.send_message(message.chat.id, "Привет, {0.first_name}!\nЯ бот, созданный для игры в поле чудес!"
                      .format(message.from_user, bot.get_me()), reply_markup=markup)
 
 
+def start_game():
+    global rand_word
+    global list_letters
+    global list_lattice
+    global rand_letter
+    rand_word = words[random.randint(0, 18)]
+
+    for i in range(len(rand_word)):
+        list_letters.insert(i, rand_word[i])
+    for i in range(len(rand_word)):
+        list_lattice.insert(i, "#")
+
+    random_letter = random.randint(0, len(list_letters) - 1)
+
+    list_lattice[random_letter] = list_letters[random_letter]
+
+
+def delete_game():
+    list_lattice.clear()
+    list_letters.clear()
+
 @bot.message_handler(func=lambda m: True)
 def start_game_message(message):
     global rand_word
-    global letters
-    global letters_game
+    global list_letters
+    global list_lattice
     global attempts
-
+    global rand_letter
+    # начинаем игру
     if message.text == 'Начать игру':
         if rand_word == "":
-            rand_word = words[random.randint(0, 18)]
-            bot.send_message(message.chat.id, "Слово выбрано. " + rand_word)
-
-            for i in range(len(rand_word)):
-                letters.insert(i, rand_word[i])
-            for i in range(len(rand_word)):
-                letters_game.insert(i, "#")
+            start_game()
+            bot.send_message(message.chat.id, "Слово выбрано. " + ''.join(list_lattice))
         else:
             bot.send_message(message.chat.id, "Вы уже играете!")
-
+    # правила игры
     elif message.text == 'Правила игры':
         bot.send_message(message.chat.id, "Загадывается рандомное слово. В первом раунде всегда "
-                                          "открывается одна рандомная буква.\nУ вас есть 2 попытки, чтобы угадать "
+                                          "открывается одна рандомная буква.\nУ вас есть 3 попытки, чтобы угадать "
                                           "букву. "
-                                          " В четвертом раунде вы должны будете написать угаданное вами слово")
+                                          "В четвертом раунде вы должны будете написать угаданное вами слово.\n"
+                                          "Все буквы должны быть строчными")
 
-    elif message.text == 'Начать заново':
-        if rand_word == "":
-            bot.send_message(message.chat.id, "Вы ещё не играете!")
-        else:
-            rand_word = words[random.randint(0, 18)]
-            for i in range(len(rand_word)):
-                letters.insert(i, rand_word[i])
-            for i in range(len(rand_word)):
-                letters_game.insert(i, "#")
-            bot.send_message(message.chat.id, "Слово выбрано. " + rand_word)
+    elif message.text == "Доступные слова":
+        bot.send_message(message.chat.id, "Доступные слова: " + ', '.join(words))
 
+    elif (len(message.text) > 1) & (rand_word == ""):
+        bot.send_message(message.chat.id, "Я не знаю что ответить. Сначала начните игру!")
 
-# проверяем есть ли написанная буква в нашем слова
-    elif rand_word != "":
-        if set(message.text).issubset(letters):
-
-            bot.send_message(message.chat.id, "Правильно!")
-        else:
-            bot.send_message(message.chat.id, "Не правильно!!")
+    elif rand_word == "":
+        bot.send_message(message.chat.id, "Сначала начните игру!")
 
     else:
-        bot.send_message(message.chat.id, "Я не знаю что ответить :(")
+        # проверяем есть ли написанная буква в нашем слове
+        if set(message.text).issubset(list_letters):
+            if message.text == rand_word:
+                bot.send_message(message.chat.id, "Вы выиграли!")
+                attempts = 0
+                rand_word = ""
+                delete_game()
+            else:
+                if attempts == 3:
+                    bot.send_message(message.chat.id, "Последняя попытка. Напишите слово!")
+                elif attempts == 4:
+                    bot.send_message(message.chat.id, " 4 попытки истрачены. Вы проиграли! Слово было: " + rand_word)
+                    rand_word = ""
+                    attempts = 0
+                    delete_game()
+                else:
+                    attempts += 1
+                    index = list_letters.index(message.text)
+                    list_lattice[index] = message.text
+                    bot.send_message(message.chat.id, "Правильно! " + ''.join(list_lattice))
+
+        else:
+            if attempts == 4:
+                bot.send_message(message.chat.id, " 4 попытки истрачены. Вы проиграли! Слово было: " + rand_word)
+                rand_word = ""
+                attempts = 0
+                delete_game()
+            else:
+                bot.send_message(message.chat.id, "Не правильно!!")
+                if attempts == 3:
+                     bot.send_message(message.chat.id, "Последняя попытка. Напишите слово!")
+                attempts += 1
 
 
 bot.polling()
